@@ -1,0 +1,67 @@
+name: Tu dong tao Repo va Cap nhat File
+
+on:
+  schedule:
+    # Chay vao luc 0 gio UTC moi ngay
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Cho phep kich hoat thu cong
+
+jobs:
+  tao-va-cap-nhat:
+    runs-on: ubuntu-latest # Chay tren moi truong Ubuntu
+
+    env:
+      # Su dung Personal Access Token da luu trong GitHub Secrets
+      GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+    steps:
+    - name: Cai dat Git
+      run: |
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+
+    - name: Tao noi dung ngau nhien
+      id: tao_noi_dung
+      run: |
+        # Tao mot chuoi ngau nhien
+        random_string=$(head /dev/urandom | tr -dc A-Za-z0-9_ | head -c 20)
+        # Lay thoi gian hien tai
+        timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+        # Ket hop thanh noi dung file
+        content="Day la mot cap nhat tu dong. Duoc tao vao $timestamp voi chuoi ngau nhien: $random_string"
+        # Luu noi dung vao bien output de cac buoc sau su dung
+        echo "random_content=$content" >> "$GITHUB_OUTPUT"
+
+    - name: Tao ten kho luu tru ngau nhien
+      id: tao_ten_repo
+      run: |
+        # Tao ten repo dua tren ngay gio hien tai
+        repo_date=$(date +"%Y%m%d-%H%M%S")
+        repo_name="auto-repo-${repo_date}"
+        # Luu ten repo vao bien output
+        echo "repo_name=$repo_name" >> "$GITHUB_OUTPUT"
+
+    - name: Tao kho luu tru moi tren GitHub
+      run: |
+        REPO_NAME="${{ steps.tao_ten_repo.outputs.repo_name }}" # Lay ten repo tu buoc truoc
+        curl -X POST \
+          -H "Authorization: token $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/user/repos \
+          -d "{\"name\": \"$REPO_NAME\", \"auto_init\": true, \"private\": false}" # Dat private thanh true neu ban muon repo rieng tu
+
+    - name: Clone kho luu tru vua tao
+      run: |
+        REPO_NAME="${{ steps.tao_ten_repo.outputs.repo_name }}"
+        # Su dung PAT de clone qua HTTPS
+        git clone "https://oauth2:${{ secrets.GH_PAT }}@github.com/${{ github.repository_owner }}/$REPO_NAME.git"
+
+    - name: Tao va cap nhat file main
+      run: |
+        REPO_NAME="${{ steps.tao_ten_repo.outputs.repo_name }}"
+        RANDOM_CONTENT="${{ steps.tao_noi_dung.outputs.random_content }}" # Lay noi dung tu buoc tao_noi_dung
+        cd "$REPO_NAME" # Di vao thu muc cua repo vua clone
+        echo "$RANDOM_CONTENT" > main.txt # Tao hoac ghi de len main.txt
+        git add main.txt # Them file vao staging area
+        git commit -m "Cap nhat tu dong: Them/Cap nhat main.txt voi noi dung ngau nhien" # Tao commit
+        git push # Day len GitHub
